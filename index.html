@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>GainTrack</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f5f7;color:#171717}
+.app{max-width:520px;margin:auto;min-height:100vh;padding:16px 14px 90px}.card{background:#fff;border:1px solid #e5e5e7;border-radius:20px;padding:16px;margin-bottom:12px}
+h1,h2,h3,p{margin:0}.muted{color:#707070}.tiny{font-size:12px;color:#777}.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+input,select,textarea{width:100%;padding:12px;border:1px solid #ddd;border-radius:12px;background:#fff;font-size:16px;margin-top:5px}
+button{border:1px solid #ddd;background:#fff;border-radius:12px;padding:11px 13px;min-height:44px;font-weight:650}button.primary{background:#171717;color:#fff;border-color:#171717}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.big{font-size:42px;font-weight:800}.progress{height:9px;background:#e9e9ec;border-radius:20px;overflow:hidden;margin-top:12px}.progress i{display:block;height:100%;background:#171717}.stat{padding:13px;border:1px solid #e5e5e7;border-radius:15px}.meal{padding:12px 0;border-bottom:1px solid #eee}.meal:last-child{border-bottom:0}
+.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(520px,100%);display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:7px 8px calc(7px + env(safe-area-inset-bottom));background:rgba(255,255,255,.96);border-top:1px solid #ddd;z-index:5}.tabs button{font-size:11px;padding:6px 2px}.tabs button.active{background:#eee}
+.hidden{display:none}.modal{position:fixed;inset:0;background:#0008;display:flex;align-items:flex-end;z-index:10}.modal>div{width:min(520px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:24px 24px 0 0;padding:18px}
+@media(min-width:700px){body{padding:30px 0}}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<script>
+const KEY="gaintrack_simple_v1";
+let S=JSON.parse(localStorage.getItem(KEY)||"null")||{profile:null,targets:[],recipes:[],days:{},sports:[],weights:[],tab:"home"};
+const save=()=>localStorage.setItem(KEY,JSON.stringify(S));
+const today=()=>new Date().toISOString().slice(0,10);
+const fmt=d=>new Date(d+"T12:00:00").toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"});
+const id=()=>Date.now()+"_"+Math.random().toString(36).slice(2);
+const esc=s=>String(s??"").replace(/[&<>"]/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[x]));
+function totals(d=today()){let a=S.days[d]?.items||[];return{k:a.reduce((n,x)=>n+ +x.kcal,0),p:a.reduce((n,x)=>n+ +x.protein,0)}}
+function weight(){return S.weights.at(-1)?.weight??S.profile?.weight??0}
+function target(){return S.targets.at(-1)}
+function view(){return document.getElementById("app")}
+function login(){
+view().innerHTML=`<div class="card">
+<h1>GainTrack</h1><p class="muted" style="margin-top:5px">Dein persönlicher Tracker für Zunehmen & Muskelaufbau.</p>
+<form id="f" style="display:grid;gap:11px;margin-top:18px">
+<div><label>Name</label><input id="name" required></div>
+<div class="grid2"><div><label>Alter</label><input id="age" type="number" required></div><div><label>Geschlecht</label><select id="sex"><option>Männlich</option><option>Weiblich</option><option>Keine Angabe</option></select></div></div>
+<div class="grid2"><div><label>Größe cm</label><input id="height" type="number" required></div><div><label>Gewicht kg</label><input id="weight" type="number" step=".1" required></div></div>
+<div class="grid2"><div><label>Ziel</label><select id="goal"><option value="gain">Zunehmen</option><option value="lose">Abnehmen</option><option value="hold">Halten</option></select></div><div><label>Muskelaufbau</label><select id="muscle"><option value="yes">Ja</option><option value="no">Nein</option></select></div></div>
+<div class="grid2"><div><label>Tagesziel kcal</label><input id="kcal" type="number" value="3300"></div><div><label>Protein g</label><input id="protein" type="number" value="115"></div></div>
+<button class="primary">App starten</button></form></div>`;
+document.getElementById("f").onsubmit=e=>{e.preventDefault();S.profile={name:name.value,age:+age.value,sex:sex.value,height:+height.value,weight:+weight.value,startWeight:+weight.value,goal:goal.value,muscle:muscle.value,kcal:+kcal.value,protein:+protein.value};S.weights=[{date:today(),weight:+weight.value}];save();render()}
+}
+function render(){
+if(!S.profile)return login();
+view().innerHTML=`<div id="main"></div><nav class="tabs">
+<button data-t="home">🏠<br>Start</button><button data-t="day">🍽️<br>Tag</button><button data-t="recipes">📖<br>Rezepte</button><button data-t="sport">🏋️<br>Sport</button><button data-t="weight">⚖️<br>Gewicht</button></nav>`;
+document.querySelectorAll("[data-t]").forEach(b=>{b.classList.toggle("active",b.dataset.t===S.tab);b.onclick=()=>{S.tab=b.dataset.t;save();render()}});
+({home,day,recipes,sport,weight}[S.tab]||home)();
+}
+function home(){
+let t=totals(),w=weight(),tar=target(),pct=tar?Math.max(0,Math.min(100,(w-S.profile.startWeight)/(tar.weight-S.profile.startWeight)*100)):0,b=S.days[today()]?.burned||0;
+document.getElementById("main").innerHTML=`<div class="row"><div><div class="tiny">GAINTRACK</div><h2>${esc(S.profile.name)}</h2></div><button id="settings">⚙️</button></div>
+<div class="card" style="margin-top:12px"><div class="tiny">AKTUELLES GEWICHT</div><div class="big">${w.toFixed(1)} kg</div><div class="muted">${tar?`Ziel ${tar.weight} kg · ${fmt(tar.date)}`:"Noch kein Ziel"}</div><div class="progress"><i style="width:${pct}%"></i></div><div class="tiny">${Math.round(pct)}% erreicht</div></div>
+<div class="grid2"><div class="stat"><div class="tiny">KALORIEN</div><b>${t.k} / ${S.profile.kcal}</b><div class="muted">${Math.max(0,S.profile.kcal-t.k)} kcal offen</div></div><div class="stat"><div class="tiny">PROTEIN</div><b>${Math.round(t.p)} / ${S.profile.protein} g</b><div class="muted">${Math.max(0,Math.round(S.profile.protein-t.p))} g offen</div></div></div>
+<div class="grid2" style="margin-top:10px"><div class="stat"><div class="tiny">AKTIVITÄT</div><b>${b} kcal</b><div class="muted">erfasst</div></div><div class="stat"><div class="tiny">ZIEL</div><b>${S.profile.goal==="gain"?"Zunehmen":S.profile.goal==="lose"?"Abnehmen":"Halten"}</b><div class="muted">${S.profile.muscle==="yes"?"Muskelaufbau":""}</div></div></div>
+<div class="card" style="margin-top:12px"><div class="row"><div><b>Heute wiegen</b><div class="tiny">Aktuelles Gewicht speichern</div></div><button id="qw">Eintragen</button></div></div>`;
+document.getElementById("qw").onclick=addWeight;document.getElementById("settings").onclick=settings;
+}
+function day(){
+let t=totals(),d=S.days[today()]||{items:[]},h=`<div class="card"><div class="row"><div><div class="tiny">HEUTE</div><h2>Tagesplan</h2></div><div><b>${t.k}/${S.profile.kcal}</b><div class="tiny">${Math.max(0,S.profile.kcal-t.k)} kcal offen</div></div></div><div class="progress"><i style="width:${Math.min(100,t.k/S.profile.kcal*100)}%"></i></div></div>`;
+for(const c of ["morgens","mittags","abends"]){let a=d.items.filter(x=>x.cat===c);h+=`<div class="card"><div class="row"><b>${c}</b><button class="add" data-c="${c}">+ Essen</button></div>${a.map(x=>`<div class="meal row"><div><b>${esc(x.name)}</b><div class="tiny">${x.kcal} kcal · ${x.protein} g Protein</div></div><button class="del" data-id="${x.id}">✕</button></div>`).join("")||`<div class="tiny" style="margin-top:8px">Noch nichts eingetragen.</div>`}</div>`}
+h+=`<div class="card"><b>Letzte Tage</b>${Object.keys(S.days).sort().reverse().slice(0,7).map(d=>{let z=totals(d);return`<div class="meal row"><span>${fmt(d)}</span><b>${z.k} kcal</b></div>`}).join("")}</div>`;
+document.getElementById("main").innerHTML=h;document.querySelectorAll(".add").forEach(b=>b.onclick=()=>addMeal(b.dataset.c));document.querySelectorAll(".del").forEach(b=>b.onclick=()=>{S.days[today()].items=S.days[today()].items.filter(x=>x.id!==b.dataset.id);save();render()});
+}
+function addMeal(cat){
+let r=S.recipes;let opts=r.map(x=>`<option value="${x.id}">${esc(x.name)} · ${x.kcal} kcal</option>`).join("");
+modal(`<h2>Essen hinzufügen</h2><div class="card"><label>Gespeichertes Gericht</label><select id="pick"><option value="">Neues Essen</option>${opts}</select><div id="fields"><label>Name</label><input id="mn"><div class="grid2"><div><label>kcal</label><input id="mk" type="number"></div><div><label>Protein</label><input id="mp" type="number"></div></div></div><div class="row" style="margin-top:12px"><button id="cancel">Abbrechen</button><button class="primary" id="ok">Hinzufügen</button></div></div>`);
+pick.onchange=()=>fields.style.display=pick.value?"none":"block";cancel.onclick=close;ok.onclick=()=>{let x=r.find(x=>x.id===pick.value);let item=x?{name:x.name,kcal:x.kcal,protein:x.protein}:{name:mn.value,kcal:+mk.value,protein:+mp.value};if(!item.name||isNaN(item.kcal)||isNaN(item.protein))return alert("Bitte alles ausfüllen.");S.days[today()]??={items:[]};S.days[today()].items.push({id:id(),cat,...item});save();close();render()}
+}
+function recipes(){
+document.getElementById("main").innerHTML=`<div class="card"><div class="row"><div><div class="tiny">SAMMLUNG</div><h2>Meine Rezepte</h2></div><button class="primary" id="nr">+ Rezept</button></div><input id="search" placeholder="Suchen …"><div id="list" style="margin-top:8px"></div></div>`;
+function list(){list.innerHTML=S.recipes.filter(r=>r.name.toLowerCase().includes(search.value.toLowerCase())).map(r=>`<div class="meal row"><div><b>${esc(r.name)}</b><div class="tiny">${r.kcal} kcal · ${r.protein} g Protein</div></div><button data-id="${r.id}" class="use">+ Tag</button></div>`).join("")||'<div class="tiny">Noch keine Rezepte.</div>'}search.oninput=list;nr.onclick=()=>{modal(`<h2>Rezept speichern</h2><label>Name</label><input id="rn"><div class="grid2"><div><label>kcal</label><input id="rk" type="number"></div><div><label>Protein</label><input id="rp" type="number"></div></div><label style="margin-top:8px">Menge optional</label><input id="rq" placeholder="z.B. 700 g"><label style="margin-top:8px">Zutaten/Rezept optional</label><textarea id="rt"></textarea><div class="row" style="margin-top:12px"><button id="c">Abbrechen</button><button class="primary" id="s">Speichern</button></div>`);c.onclick=close;s.onclick=()=>{if(!rn.value||isNaN(rk.value)||isNaN(rp.value))return alert("Bitte Name, kcal und Protein angeben.");S.recipes.push({id:id(),name:rn.value,kcal:+rk.value,protein:+rp.value,quantity:rq.value,recipe:rt.value});save();close();render()}};list();
+}
+function sport(){
+let dn=["So","Mo","Di","Mi","Do","Fr","Sa"][new Date().getDay()],todaySports=S.sports.filter(x=>x.days.includes(dn));
+document.getElementById("main").innerHTML=`<div class="card"><div class="row"><div><div class="tiny">TRAINING</div><h2>Sportplan</h2></div><button class="primary" id="ns">+ Aktivität</button></div>${todaySports.length?todaySports.map(s=>`<div class="meal row"><div><b>${esc(s.name)}</b><div class="tiny">${s.time} · ${s.duration} min · ${s.kcal} kcal</div></div><button class="done" data-id="${s.id}">War da</button></div>`).join(""):'<div class="tiny" style="margin-top:10px">Heute kein Training geplant.</div>'}</div><div class="card"><b>Geplant</b>${S.sports.map(s=>`<div class="meal row"><div><b>${esc(s.name)}</b><div class="tiny">${s.days.join(", ")} · ${s.time}</div></div></div>`).join("")||'<div class="tiny">Noch nichts.</div>'}</div>`;
+ns.onclick=()=>{modal(`<h2>Aktivität</h2><label>Name</label><input id="sn" value="Gym"><label>Wochentage</label><input id="sd" value="Mo,Mi,Fr"><div class="grid2"><div><label>Zeit</label><input id="st" type="time" value="15:00"></div><div><label>Dauer</label><input id="sdu" type="number" value="60"></div></div><label>kcal Verbrauch</label><input id="sk" type="number" value="300"><div class="row" style="margin-top:12px"><button id="c">Abbrechen</button><button class="primary" id="ss">Speichern</button></div>`);c.onclick=close;ss.onclick=()=>{S.sports.push({id:id(),name:sn.value,days:sd.value.split(",").map(x=>x.trim()),time:st.value,duration:+sdu.value,kcal:+sk.value});save();close();render()}};document.querySelectorAll(".done").forEach(b=>b.onclick=()=>{let s=S.sports.find(x=>x.id===b.dataset.id),m=prompt("Tatsächliche Trainingsdauer in Minuten",s.duration);if(!m)return;let kcal=Math.round(s.kcal*(+m/s.duration));S.days[today()]??={items:[]};S.days[today()].burned=(S.days[today()].burned||0)+kcal;save();alert(kcal+" kcal Verbrauch gespeichert.");render()})
+}
+function weight(){
+let rows=S.weights.slice().reverse().map(x=>`<div class="meal row"><span>${fmt(x.date)}</span><b>${x.weight.toFixed(1)} kg</b></div>`).join("");
+document.getElementById("main").innerHTML=`<div class="card"><div class="row"><div><div class="tiny">GEWICHT</div><h2>Statistik</h2></div><button class="primary" id="aw">+ Gewicht</button></div><div class="stat" style="margin-top:12px"><div class="tiny">AKTUELL</div><b style="font-size:25px">${weight().toFixed(1)} kg</b></div><div class="stat" style="margin-top:10px"><div class="tiny">MESSUNGEN</div><b>${S.weights.length}</b></div></div><div class="card"><b>Gewichtsverlauf</b>${rows||'<div class="tiny">Noch keine Messungen.</div>'}</div><div class="card"><div class="row"><b>Ziele</b><button id="ag">+ Ziel</button></div>${S.targets.map(x=>`<div class="meal row"><span>${x.weight} kg</span><b>${fmt(x.date)}</b></div>`).join("")||'<div class="tiny">Keine Ziele.</div>'}</div>`;aw.onclick=addWeight;ag.onclick=()=>{let d=prompt("Datum YYYY-MM-DD","2027-05-17"),w=prompt("Zielgewicht","75");if(d&&w){S.targets.push({date:d,weight:+w});S.targets.sort((a,b)=>a.date.localeCompare(b.date));save();render()}}
+}
+function addWeight(){let w=prompt("Gewicht heute (kg)",weight().toFixed(1));if(!w||isNaN(w))return;S.weights=S.weights.filter(x=>x.date!==today());S.weights.push({date:today(),weight:+w});S.weights.sort((a,b)=>a.date.localeCompare(b.date));save();render()}
+function settings(){modal(`<h2>Einstellungen</h2><label>Name</label><input id="en" value="${esc(S.profile.name)}"><div class="grid2"><div><label>kcal Ziel</label><input id="ek" type="number" value="${S.profile.kcal}"></div><div><label>Protein Ziel</label><input id="ep" type="number" value="${S.profile.protein}"></div></div><div class="row" style="margin-top:12px"><button id="c">Abbrechen</button><button class="primary" id="s">Speichern</button></div><button id="reset" style="margin-top:10px;color:#b00">Alle Daten löschen</button>`);c.onclick=close;s.onclick=()=>{S.profile.name=en.value;S.profile.kcal=+ek.value;S.profile.protein=+ep.value;save();close();render()};reset.onclick=()=>{if(confirm("Alle Daten löschen?")){localStorage.removeItem(KEY);location.reload()}}}
+function modal(html){let m=document.createElement("div");m.className="modal";m.innerHTML="<div>"+html+"</div>";document.body.appendChild(m);window._modal=m}function close(){window._modal?.remove()}
+render();
+</script>
+</div>
+</body>
+</html>
